@@ -118,4 +118,11 @@ object RecurrenceExpander {
 
         return result.sorted().take(maxCount)
     }
+
+    /**
+     * Primera ocurrencia futura de la regla, o `null` si no hay ninguna dentro del horizonte de
+     * búsqueda (hasta ~6 años para anuales, ~48 meses para mensuales, etc.).
+     */
+    fun nextOccurrence(recurrence: Recurrence, now: Long, zone: ZoneId): Long? =
+        nextOccurrences(recurrence, now, zone, windowDays = 4000, maxCount = 1).firstOrNull()
 }

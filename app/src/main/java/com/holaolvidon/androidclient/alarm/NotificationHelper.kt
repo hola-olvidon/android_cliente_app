@@ -84,7 +84,9 @@ object NotificationHelper {
         val openIntent = PendingIntent.getActivity(
             context,
             0,
-            Intent(context, MainActivity::class.java),
+            Intent(context, AlarmRingingActivity::class.java)
+                .putExtra(AlarmScheduler.EXTRA_TITLE, title)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val stopIntent = PendingIntent.getService(

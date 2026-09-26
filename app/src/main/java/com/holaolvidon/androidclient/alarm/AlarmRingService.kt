@@ -29,6 +29,7 @@ class AlarmRingService : Service() {
         val baseUrl = intent?.getStringExtra(AlarmScheduler.EXTRA_BASE_URL) ?: ""
         val apiKey = intent?.getStringExtra(AlarmScheduler.EXTRA_API_KEY) ?: ""
 
+        RingingState.start(title)
         startForeground(NOTIFICATION_ID, NotificationHelper.buildRingingNotification(this, title))
 
         Thread {
@@ -97,6 +98,7 @@ class AlarmRingService : Service() {
         stopped = true
         player?.let { runCatching { it.release() } }
         player = null
+        RingingState.stop()
         super.onDestroy()
     }
 

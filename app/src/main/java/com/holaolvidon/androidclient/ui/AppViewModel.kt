@@ -1,10 +1,13 @@
 package com.holaolvidon.androidclient.ui
 
 import android.app.Application
+import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.holaolvidon.androidclient.alarm.AlarmRingService
 import com.holaolvidon.androidclient.alarm.AlarmScheduler
 import com.holaolvidon.androidclient.alarm.AudioCache
+import com.holaolvidon.androidclient.alarm.RingingState
 import com.holaolvidon.androidclient.data.Alarm
 import com.holaolvidon.androidclient.data.ApiClient
 import com.holaolvidon.androidclient.data.Settings
@@ -37,6 +40,7 @@ data class UiState(
     val error: String? = null,
     val lastUpdated: Long? = null,
     val serverTimeZone: String? = null,
+    val ringingAlarmTitle: String? = null,
 )
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -63,6 +67,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (_uiState.value.connected) {
             silentConnect()
         }
+
+        // Refleja en la UI si hay una alarma sonando (para mostrar el overlay "Detener").
+        viewModelScope.launch {
+            RingingState.ringing.collect { title ->
+                _uiState.value = _uiState.value.copy(ringingAlarmTitle = title)
+            }
+        }
+    }
+
+    /** Detiene la alarma que está sonando (envía la acción de parada al servicio). */
+    fun stopRinging() {
+        val intent = Intent(app, AlarmRingService::class.java)
+            .setAction(AlarmRingService.ACTION_STOP)
+        app.startService(intent)
     }
 
     fun updateBaseUrl(value: String) {

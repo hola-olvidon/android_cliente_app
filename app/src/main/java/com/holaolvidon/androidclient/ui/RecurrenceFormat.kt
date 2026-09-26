@@ -1,8 +1,19 @@
 package com.holaolvidon.androidclient.ui
 
+import com.holaolvidon.androidclient.alarm.RecurrenceExpander
+import com.holaolvidon.androidclient.data.Alarm
 import com.holaolvidon.androidclient.data.Recurrence
+import java.time.ZoneId
 
 private val DIAS = listOf("Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom")
+
+/** Próximo instante (epoch ms) en que sonará la alarma, o `null` si no tiene más ejecuciones futuras. */
+fun nextExecution(alarm: Alarm, now: Long, zone: ZoneId): Long? =
+    if (alarm.recurrencia == null) {
+        alarm.horaProgramada.takeIf { it > now }
+    } else {
+        RecurrenceExpander.nextOccurrence(alarm.recurrencia, now, zone)
+    }
 
 /** Resumen legible de una regla de recurrencia (espejo del `formatRecurrence` del frontend). */
 fun formatRecurrence(r: Recurrence): String {

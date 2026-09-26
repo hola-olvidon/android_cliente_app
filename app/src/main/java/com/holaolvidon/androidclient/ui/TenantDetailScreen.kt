@@ -14,10 +14,12 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.holaolvidon.androidclient.data.Alarm
+import java.time.ZoneId
 
 /** Detalle de un tenant: toggle "todas las alarmas" (por defecto) o selección manual. */
 @Composable
@@ -27,6 +29,12 @@ fun TenantDetailScreen(state: UiState, viewModel: AppViewModel, padding: Padding
         state.tenants.firstOrNull { it.id == id }?.nombre ?: id
     } ?: ""
     val subscribeAll = tenantId?.let { it in state.subscribedTenantIds } ?: false
+
+    val zone = remember(state.serverTimeZone) {
+        state.serverTimeZone?.let { runCatching { ZoneId.of(it) }.getOrNull() }
+            ?: ZoneId.of("UTC")
+    }
+    val now = System.currentTimeMillis()
 
     Column(
         modifier = Modifier
@@ -88,6 +96,7 @@ fun TenantDetailScreen(state: UiState, viewModel: AppViewModel, padding: Padding
                 items(state.tenantAlarms, key = { it.id }) { alarm ->
                     AlarmRow(
                         alarm = alarm,
+                        nextExecution = nextExecution(alarm, now, zone),
                         subscribeAll = subscribeAll,
                         manualChecked = tenantId?.let { alarm.id in (state.manualSubscriptions[it] ?: emptySet()) } ?: false,
                         onToggle = { enabled -> tenantId?.let { viewModel.toggleAlarm(it, alarm.id, enabled) } },
@@ -101,6 +110,7 @@ fun TenantDetailScreen(state: UiState, viewModel: AppViewModel, padding: Padding
 @Composable
 private fun AlarmRow(
     alarm: Alarm,
+    nextExecution: Long?,
     subscribeAll: Boolean,
     manualChecked: Boolean,
     onToggle: (Boolean) -> Unit,
@@ -124,6 +134,19 @@ private fun AlarmRow(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (nextExecution != null) {
+                    Text(
+                        "Próxima: ${formatTime(nextExecution)}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                } else if (alarm.activa) {
+                    Text(
+                        "Sin próxima ejecución",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.outline,
+                    )
+                }
                 if (!alarm.activa) {
                     Text(
                         "Inactiva",
