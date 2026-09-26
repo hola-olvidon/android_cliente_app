@@ -2,16 +2,12 @@ package com.holaolvidon.androidclient.ui
 
 import androidx.compose.runtime.Composable
 
-/** Conmuta entre la pantalla de configuración y la lista de alarmas según el estado de conexión. */
+/** Conmuta entre la pantalla de conexión y la principal según el estado de conexión. */
 @Composable
 fun AppRoot(state: UiState, viewModel: AppViewModel) {
     if (state.connected) {
-        AlarmsScreen(
-            state = state,
-            onRefresh = viewModel::refresh,
-            onDisconnect = viewModel::disconnect,
-        )
+        MainScreen(state = state, viewModel = viewModel)
     } else {
-        SettingsScreen(state = state, viewModel = viewModel)
+        ConnectScreen(state = state, viewModel = viewModel)
     }
 }

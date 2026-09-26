@@ -1,24 +1,21 @@
 # android_client — Cliente Android de alarmas
 
 Cliente Android nativo (Kotlin + Jetpack Compose) para el servicio de alarmas del backend de
-`hola_olvidon`. Permite **suscribirse a un tenant** (por su `id` + clave de API) y recibir **todas
-las alarmas que contiene**, listándolas y **sonando** (notificación + sonido + audio opcional)
-cuando se alcanza la `horaProgramada` de una alarma activa.
+`hola_olvidon`. Permite conectar con la **URL + clave de API**, elegir **uno o varios tenants** de
+una lista y **suscribirse** a las alarmas que quieras, sonando (notificación + sonido + audio
+opcional) a la `horaProgramada` de cada alarma suscrita.
 
 ## Cómo funciona
 
-1. En la pantalla de configuración se indican la **URL del servidor**, la **clave de API
-   (`X-API-KEY`)** y el **ID del tenant**.
-2. Al pulsar *Conectar*, la app hace polling de `GET /tenants/{id}` (con el header `X-API-KEY`)
-   cada N segundos (por defecto 30).
-3. Cada respuesta trae el tenant con su lista de alarmas. La app las muestra y programa una
-   **alarma local** (`AlarmManager`, exacta) por cada alarma activa con hora futura.
-4. Al llegar la hora, se muestra una **notificación** (sonido de alarma + vibración) y, si la
-   alarma tiene `urlAudio`, se intenta reproducir ese audio (best-effort).
+1. En la pantalla de conexión se indican solo **dos datos**: la **URL del servidor** y la **clave
+   de API (`X-API-KEY`)**.
+2. Al pulsar *Conectar*, la app consulta `GET /mobile/tenants` y muestra la **lista de tenants**.
+3. Marca uno o varios tenants; la app obtiene sus alarmas (`GET /tenants/:id`) y las lista.
+4. Activa el **switch** de cada alarma para suscribirte. Las alarmas suscritas se programan
+   localmente (`AlarmManager`) y suenan a su hora.
 
-> El backend **no** expone WebSocket/SSE/push; por eso el cliente usa *polling*. Las alarmas se
-> reprograman en cada refresco y también cada vez que se abre la app (se pierden si el dispositivo
-> se reinicia hasta que la app se vuelve a abrir).
+> El backend **no** expone WebSocket/SSE/push; por eso el cliente hace *polling* (cada 30 s) para
+> refrescar las alarmas de los tenants seleccionados.
 
 ## Requisitos para compilar
 
@@ -47,39 +44,28 @@ gradlew.bat assembleDebug
 
 La APK de debug queda en: `app/build/outputs/apk/debug/app-debug.apk`.
 
-### Compilar con GitHub Actions (sin instalar nada localmente)
+### Compilar y publicar con GitHub Actions
 
-El repo incluye `.github/workflows/build-apk.yml`, que compila la APK en un runner de GitHub:
+El repo incluye `.github/workflows/build-apk.yml`. En cada push compila la APK y la publica como
+**release** de GitHub (archivo `.apk` directo, sin comprimir, con el nombre del repositorio):
 
-1. Sube la carpeta `android_client` como repositorio propio en GitHub:
-   ```bash
-   cd android_client
-   git init
-   git add -A
-   git commit -m "Cliente Android de alarmas"
-   git branch -M main
-   git remote add origin https://github.com/<TU_USUARIO>/android_client.git
-   git push -u origin main
-   ```
-2. El workflow se dispara automáticamente con el push (también se puede lanzar a mano
-   desde la pestaña **Actions → Build APK → Run workflow**).
-3. Descarga la APK: **Actions → el run verde → sección *Artifacts* → `app-debug`** (un `.zip`
-   que contiene `app-debug.apk`).
+- **Descargar**: pestaña **Releases** del repositorio → release **latest** → `android_cliente_app.apk`.
+- También se puede lanzar a mano desde **Actions → Build APK → Run workflow**.
 
-> El runner de GitHub usa el SDK de Android preinstalado y `actions/setup-java` con JDK 17;
-> no hace falta configurar `local.properties` en CI (AGP localiza el SDK vía `ANDROID_HOME`).
+El release se sobrescribe en cada build (tag `latest`), así que siempre hay un único enlace directo:
 
-## Configuración de conexión
+```
+https://github.com/<TU_USUARIO>/android_cliente_app/releases/latest
+```
+
+## Configuración
 
 | Campo | Valor por defecto | Nota |
 |---|---|---|
-| URL del servidor | `http://10.0.2.2:3000` | `10.0.2.2` apunta al host desde el **emulador**; desde un **dispositivo físico** usar la IP LAN de la máquina (ej. `http://192.168.1.10:3000`) |
-| Clave de API | `clave_secreta_movil` | Valor de `MOBILE_API_KEY` (ver `Backend/docker-compose.yml`) |
-| ID del tenant | *(vacío)* | El UUID del tenant al que suscribirse |
-| Intervalo de sondeo | `30` | Segundos entre consultas |
+| URL del servidor | `http://10.0.2.2:3000` | `10.0.2.2` apunta al host desde el **emulador**; desde un **dispositivo físico** usar la IP LAN (ej. `http://192.168.1.10:3000`) |
+| Clave de API | `clave_secreta_movil` | Valor de `MOBILE_API_KEY` (ver `Backend/docker-compose.yml`); se envía en el header `X-API-KEY` |
 
-Para obtener el **ID del tenant**: en el panel admin (`Frontend`), o vía `GET /tenants` con JWT de
-administrador.
+La lista de tenants se obtiene automáticamente del backend; no hace falta conocer los IDs a mano.
 
 ## Permisos en tiempo de ejecución
 
@@ -93,14 +79,14 @@ administrador.
 app/src/main/java/com/holaolvidon/androidclient/
 ├── MainActivity.kt          # host Compose + petición de permisos
 ├── data/
-│   ├── Models.kt            # Tenant, Alarm
-│   ├── ApiClient.kt         # GET /tenants/{id} con X-API-KEY (OkHttp + org.json)
+│   ├── Models.kt            # TenantSummary, Tenant, Alarm
+│   ├── ApiClient.kt         # GET /mobile/tenants y /tenants/{id} (OkHttp + org.json)
 │   └── Settings.kt          # persistencia (SharedPreferences)
 ├── ui/
-│   ├── AppViewModel.kt      # estado + polling + reprogramación
-│   ├── AppRoot.kt           # conmuta Configuración / Alarmas
-│   ├── SettingsScreen.kt    # formulario de conexión
-│   ├── AlarmsScreen.kt      # lista de alarmas
+│   ├── AppViewModel.kt      # estado + polling + suscripciones + programación
+│   ├── AppRoot.kt           # conmuta Conexión / Principal
+│   ├── ConnectScreen.kt     # URL + clave de API
+│   ├── MainScreen.kt        # tenants (selección) + alarmas (suscripción)
 │   └── theme/               # tema Material 3
 └── alarm/
     ├── AlarmScheduler.kt    # programa/cancela alarmas exactas
@@ -108,13 +94,14 @@ app/src/main/java/com/holaolvidon/androidclient/
     └── NotificationHelper.kt# canal y notificación de alarma
 ```
 
-## Notas sobre el backend (observaciones, no bloqueantes)
+## Notas sobre el backend
 
-- `GET /tenants/:id` también devuelve el hash `password` del tenant; este cliente lo ignora, pero
-  convendría omitirlo del lado servidor.
-- `GET /alarms/tenant/:tenantId` está definido dos veces en `alarms.controller.ts` (la variante con
-  JWT eclipsa la de `X-API-KEY`). Este cliente no usa esa ruta, pero vale la pena corregir el
-  duplicado.
+- Se añadió el endpoint `GET /mobile/tenants` (protegido con `X-API-KEY`) para listar los tenants
+  desde la app móvil. Requiere **recompilar/reiniciar el backend** para que esté disponible
+  (`docker compose up --build`, o el equivalente en tu entorno).
+- `GET /tenants/:id` ya **no** devuelve el hash `password` del tenant (se omitió en la respuesta).
+- `GET /alarms/tenant/:tenantId` sigue estando duplicado en `alarms.controller.ts` (la variante con
+  JWT eclipsa la de `X-API-KEY`). La app no usa esa ruta, pero convendría corregir el duplicado.
 
 ## Posibles mejoras
 

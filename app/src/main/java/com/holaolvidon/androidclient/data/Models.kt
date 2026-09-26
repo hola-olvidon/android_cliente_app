@@ -1,6 +1,12 @@
 package com.holaolvidon.androidclient.data
 
-/** Alarma tal como la devuelve el backend (`GET /tenants/:id`). */
+/** Tenant resumido para la lista de selección (`GET /mobile/tenants`). */
+data class TenantSummary(
+    val id: String,
+    val nombre: String,
+)
+
+/** Alarma tal como la devuelve el backend. */
 data class Alarm(
     val id: String,
     val tenantId: String,
@@ -10,7 +16,7 @@ data class Alarm(
     val activa: Boolean,
 )
 
-/** Tenant con sus alarmas incluidas. */
+/** Tenant con sus alarmas incluidas (`GET /tenants/:id`). */
 data class Tenant(
     val id: String,
     val nombre: String,

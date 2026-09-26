@@ -20,7 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun SettingsScreen(state: UiState, viewModel: AppViewModel) {
+fun ConnectScreen(state: UiState, viewModel: AppViewModel) {
     Scaffold { padding ->
         Column(
             modifier = Modifier
@@ -29,7 +29,7 @@ fun SettingsScreen(state: UiState, viewModel: AppViewModel) {
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
         ) {
-            Text("Configuración", style = MaterialTheme.typography.headlineSmall)
+            Text("Conectar al servicio", style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(16.dp))
 
             OutlinedTextField(
@@ -48,29 +48,11 @@ fun SettingsScreen(state: UiState, viewModel: AppViewModel) {
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-            Spacer(Modifier.height(8.dp))
-
-            OutlinedTextField(
-                value = state.tenantId,
-                onValueChange = viewModel::updateTenantId,
-                label = { Text("ID del tenant") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(8.dp))
-
-            OutlinedTextField(
-                value = state.pollIntervalSeconds.toString(),
-                onValueChange = { value -> value.toLongOrNull()?.let(viewModel::updateInterval) },
-                label = { Text("Intervalo de sondeo (segundos)") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
             Spacer(Modifier.height(16.dp))
 
             Button(
                 onClick = viewModel::connect,
-                enabled = !state.loading && state.tenantId.isNotBlank(),
+                enabled = !state.loading && state.baseUrl.isNotBlank() && state.apiKey.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 if (state.loading) {
@@ -91,8 +73,8 @@ fun SettingsScreen(state: UiState, viewModel: AppViewModel) {
 
             Spacer(Modifier.height(16.dp))
             Text(
-                text = "La app consulta GET /tenants/{id} con el header X-API-KEY y " +
-                    "programa una alarma local por cada alarma activa.",
+                text = "Con la URL y la clave de API (X-API-KEY) la app obtendrá la lista de " +
+                    "tenants disponibles. Luego podrás elegir cuáles seguir y a qué alarmas suscribirte.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -3,8 +3,10 @@ name: Build APK
 on:
   push:
     branches: [main, master]
-  pull_request:
   workflow_dispatch: # permite lanzar el build manualmente desde la pestaña Actions
+
+permissions:
+  contents: write # necesario para crear/actualizar el release
 
 jobs:
   build:
@@ -29,9 +31,15 @@ jobs:
       - name: Build debug APK
         run: ./gradlew assembleDebug --no-daemon
 
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+      - name: Rename APK (nombre del repositorio)
+        run: cp app/build/outputs/apk/debug/app-debug.apk android_cliente_app.apk
+
+      - name: Publish APK to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create latest android_cliente_app.apk \
+            --title "Android Cliente App (latest)" \
+            --notes "APK de debug compilada automáticamente desde la rama ${GITHUB_REF_NAME}." \
+            --prerelease
