@@ -18,7 +18,7 @@ class AlarmScheduler(private val context: Context) {
         context.getSharedPreferences("alarm_scheduler", Context.MODE_PRIVATE)
 
     /** Programa una alarma exacta por cada alarma activa con hora futura; cancela las obsoletas. */
-    fun schedule(alarms: List<Alarm>) {
+    fun schedule(alarms: List<Alarm>, baseUrl: String, apiKey: String) {
         val now = System.currentTimeMillis()
         val toSchedule = alarms.filter { it.activa && it.horaProgramada > now }
         val newIds = toSchedule.map { it.id }.toSet()
@@ -27,7 +27,7 @@ class AlarmScheduler(private val context: Context) {
         oldIds.filter { it !in newIds }.forEach { cancel(it) }
 
         for (alarm in toSchedule) {
-            setAlarm(alarm.horaProgramada, pendingIntent(alarm))
+            setAlarm(alarm.horaProgramada, pendingIntent(alarm, baseUrl, apiKey))
         }
 
         prefs.edit().putStringSet(PREF_IDS, newIds).apply()
@@ -56,10 +56,12 @@ class AlarmScheduler(private val context: Context) {
         }
     }
 
-    private fun pendingIntent(alarm: Alarm): PendingIntent {
+    private fun pendingIntent(alarm: Alarm, baseUrl: String, apiKey: String): PendingIntent {
         val intent = Intent(context, AlarmReceiver::class.java).apply {
             putExtra(EXTRA_TITLE, alarm.titulo)
             putExtra(EXTRA_AUDIO, alarm.urlAudio)
+            putExtra(EXTRA_BASE_URL, baseUrl)
+            putExtra(EXTRA_API_KEY, apiKey)
         }
         return PendingIntent.getBroadcast(
             context,
@@ -84,5 +86,7 @@ class AlarmScheduler(private val context: Context) {
 
         const val EXTRA_TITLE = "extra_title"
         const val EXTRA_AUDIO = "extra_audio"
+        const val EXTRA_BASE_URL = "extra_base_url"
+        const val EXTRA_API_KEY = "extra_api_key"
     }
 }

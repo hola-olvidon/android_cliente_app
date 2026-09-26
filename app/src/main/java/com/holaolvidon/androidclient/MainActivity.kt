@@ -28,7 +28,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        NotificationHelper.ensureChannel(this)
+        NotificationHelper.ensureChannels(this)
         requestNotificationPermissionIfNeeded()
         requestExactAlarmPermissionIfNeeded()
 

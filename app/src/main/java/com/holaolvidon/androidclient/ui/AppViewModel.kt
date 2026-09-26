@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.holaolvidon.androidclient.alarm.AlarmScheduler
+import com.holaolvidon.androidclient.alarm.AudioCache
 import com.holaolvidon.androidclient.data.Alarm
 import com.holaolvidon.androidclient.data.ApiClient
 import com.holaolvidon.androidclient.data.Settings
@@ -23,11 +24,14 @@ data class UiState(
     val baseUrl: String = "",
     val apiKey: String = "",
     val connected: Boolean = false,
+    val successMessage: String? = null,
+    val showSettings: Boolean = false,
     val tenants: List<TenantSummary> = emptyList(),
-    val selectedTenantIds: Set<String> = emptySet(),
-    val tenantNames: Map<String, String> = emptyMap(),
-    val alarms: List<Alarm> = emptyList(),
-    val subscribedAlarmIds: Set<String> = emptySet(),
+    val selectedTenantId: String? = null,
+    val tenantAlarms: List<Alarm> = emptyList(),
+    val subscribedTenantIds: Set<String> = emptySet(),
+    val manualSubscriptions: Map<String, Set<String>> = emptyMap(),
+    val followedAlarms: List<Alarm> = emptyList(),
     val loading: Boolean = false,
     val error: String? = null,
     val lastUpdated: Long? = null,
@@ -37,18 +41,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val settings = Settings(app)
     private val apiClient = ApiClient()
     private val scheduler = AlarmScheduler(app)
+    private val audioCache = AudioCache(app)
 
     private val _uiState = MutableStateFlow(
         UiState(
             baseUrl = settings.baseUrl,
             apiKey = settings.apiKey,
-            selectedTenantIds = settings.selectedTenantIds,
-            subscribedAlarmIds = settings.subscribedAlarmIds,
+            connected = settings.configured,
+            subscribedTenantIds = settings.subscribedTenantIds,
+            manualSubscriptions = settings.manualSubscriptions,
         ),
     )
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
     private var pollJob: Job? = null
+
+    init {
+        // Si ya se conectó antes, saltamos el login y cargamos en segundo plano.
+        if (_uiState.value.connected) {
+            silentConnect()
+        }
+    }
 
     fun updateBaseUrl(value: String) {
         _uiState.value = _uiState.value.copy(baseUrl = value)
@@ -58,11 +71,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _uiState.value = _uiState.value.copy(apiKey = value)
     }
 
-    /** Conecta: valida la clave y carga la lista de tenants. */
+    /** Conexión explícita desde la pantalla de login: valida, guarda y muestra éxito. */
     fun connect() {
         val s = _uiState.value
         settings.baseUrl = s.baseUrl
         settings.apiKey = s.apiKey
+        settings.configured = true
 
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(loading = true, error = null)
@@ -74,9 +88,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     tenants = tenants,
                     connected = true,
                     loading = false,
+                    successMessage = "Conexión exitosa",
                 )
                 startPolling()
-                refreshAlarms()
+                refreshFollowedAlarms()
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     connected = false,
@@ -87,44 +102,140 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Conexión silenciosa al arrancar (ya configurado): no muestra mensaje de éxito. */
+    private fun silentConnect() {
+        val s = _uiState.value
+        viewModelScope.launch {
+            try {
+                val tenants = withContext(Dispatchers.IO) {
+                    apiClient.fetchTenants(s.baseUrl, s.apiKey)
+                }
+                _uiState.value = _uiState.value.copy(tenants = tenants)
+                startPolling()
+                refreshFollowedAlarms()
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(error = e.message ?: "Error desconocido")
+            }
+        }
+    }
+
+    /** Refresca la lista de tenants y las alarmas seguidas (botón "Actualizar"). */
+    fun refresh() {
+        val s = _uiState.value
+        if (!s.connected) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(loading = true, error = null)
+            try {
+                val tenants = withContext(Dispatchers.IO) {
+                    apiClient.fetchTenants(s.baseUrl, s.apiKey)
+                }
+                _uiState.value = _uiState.value.copy(tenants = tenants, loading = false)
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    loading = false,
+                    error = e.message ?: "Error desconocido",
+                )
+            }
+        }
+        refreshFollowedAlarms()
+    }
+
     private fun startPolling() {
         pollJob?.cancel()
         pollJob = viewModelScope.launch {
             while (true) {
                 delay(POLL_INTERVAL_MS)
-                refreshAlarms()
+                refreshFollowedAlarms()
             }
         }
     }
 
-    /** Selecciona/deselecciona un tenant y refresca las alarmas. */
-    fun toggleTenant(tenantId: String) {
-        val current = _uiState.value.selectedTenantIds
-        val next = if (tenantId in current) current - tenantId else current + tenantId
-        settings.selectedTenantIds = next
-        _uiState.value = _uiState.value.copy(selectedTenantIds = next)
-        refreshAlarms()
+    // --- Navegación ---
+
+    fun openSettings() {
+        _uiState.value = _uiState.value.copy(showSettings = true)
     }
 
-    /** Activa/desactiva la suscripción a una alarma concreta. */
-    fun toggleAlarm(alarmId: String) {
-        val current = _uiState.value.subscribedAlarmIds
-        val next = if (alarmId in current) current - alarmId else current + alarmId
-        settings.subscribedAlarmIds = next
-        _uiState.value = _uiState.value.copy(subscribedAlarmIds = next)
-        rescheduleAlarms()
+    fun closeSettings() {
+        _uiState.value = _uiState.value.copy(showSettings = false)
     }
 
-    /** Consulta las alarmas de todos los tenants seleccionados. */
-    fun refreshAlarms() {
+    fun openTenant(tenantId: String) {
+        val s = _uiState.value
+        var subscribed = s.subscribedTenantIds
+        if (tenantId !in subscribed && tenantId !in s.manualSubscriptions) {
+            // Por defecto, abrir un tenant lo suscribe a todas sus alarmas.
+            subscribed = subscribed + tenantId
+            settings.subscribedTenantIds = subscribed
+        }
+        _uiState.value = _uiState.value.copy(
+            selectedTenantId = tenantId,
+            subscribedTenantIds = subscribed,
+        )
+        loadTenantAlarms(tenantId)
+        refreshFollowedAlarms()
+    }
+
+    fun closeTenant() {
+        _uiState.value = _uiState.value.copy(selectedTenantId = null, tenantAlarms = emptyList())
+    }
+
+    private fun loadTenantAlarms(tenantId: String) {
+        val s = _uiState.value
+        viewModelScope.launch {
+            try {
+                val tenant = withContext(Dispatchers.IO) {
+                    apiClient.fetchTenant(s.baseUrl, s.apiKey, tenantId)
+                }
+                _uiState.value = _uiState.value.copy(
+                    tenantAlarms = tenant.alarms.sortedBy { it.horaProgramada },
+                    error = null,
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(error = e.message ?: "Error desconocido")
+            }
+        }
+    }
+
+    // --- Suscripciones ---
+
+    fun toggleSubscribeAll(tenantId: String, enabled: Boolean) {
+        val s = _uiState.value
+        val subscribed = if (enabled) s.subscribedTenantIds + tenantId
+        else s.subscribedTenantIds - tenantId
+        val manual = if (enabled) s.manualSubscriptions - tenantId
+        else s.manualSubscriptions + (tenantId to emptySet())
+
+        settings.subscribedTenantIds = subscribed
+        settings.manualSubscriptions = manual
+        _uiState.value = _uiState.value.copy(
+            subscribedTenantIds = subscribed,
+            manualSubscriptions = manual,
+        )
+        refreshFollowedAlarms()
+    }
+
+    fun toggleAlarm(tenantId: String, alarmId: String, enabled: Boolean) {
+        val s = _uiState.value
+        val current = s.manualSubscriptions[tenantId] ?: emptySet()
+        val next = if (enabled) current + alarmId else current - alarmId
+        val manual = s.manualSubscriptions + (tenantId to next)
+
+        settings.manualSubscriptions = manual
+        _uiState.value = _uiState.value.copy(manualSubscriptions = manual)
+        refreshFollowedAlarms()
+    }
+
+    // --- Alarmas seguidas ---
+
+    fun refreshFollowedAlarms() {
         val s = _uiState.value
         if (!s.connected) return
 
-        if (s.selectedTenantIds.isEmpty()) {
+        val tenantIds = s.subscribedTenantIds + s.manualSubscriptions.keys
+        if (tenantIds.isEmpty()) {
             _uiState.value = _uiState.value.copy(
-                alarms = emptyList(),
-                tenantNames = emptyMap(),
-                loading = false,
+                followedAlarms = emptyList(),
                 error = null,
                 lastUpdated = null,
             )
@@ -133,77 +244,101 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
 
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(loading = true, error = null)
             try {
-                val (names, alarms) = withContext(Dispatchers.IO) { fetchAlarmsForSelected(s) }
-                _uiState.value = _uiState.value.copy(
-                    tenantNames = names,
-                    alarms = alarms.sortedBy { it.horaProgramada },
-                    loading = false,
+                val alarms = withContext(Dispatchers.IO) {
+                    fetchAlarmsForIds(s, tenantIds.toList())
+                }
+                val newState = _uiState.value.copy(
+                    followedAlarms = alarms,
                     lastUpdated = System.currentTimeMillis(),
+                    error = null,
                 )
+                _uiState.value = newState
                 rescheduleAlarms()
+                preCacheAudio(effectiveSubscribed(newState))
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    loading = false,
-                    error = e.message ?: "Error desconocido",
-                )
+                _uiState.value = _uiState.value.copy(error = e.message ?: "Error desconocido")
             }
         }
     }
 
-    /** Obtiene, en paralelo, las alarmas de cada tenant seleccionado (tolerando fallos parciales). */
-    private suspend fun fetchAlarmsForSelected(s: UiState): Pair<Map<String, String>, List<Alarm>> =
+    /** Obtiene, en paralelo, las alarmas de cada tenant (tolerando fallos parciales). */
+    private suspend fun fetchAlarmsForIds(s: UiState, ids: List<String>): List<Alarm> =
         coroutineScope {
-            val deferreds = s.selectedTenantIds.map { id ->
+            val deferreds = ids.map { id ->
                 async(Dispatchers.IO) { apiClient.fetchTenant(s.baseUrl, s.apiKey, id) }
             }
 
-            val names = mutableMapOf<String, String>()
             val alarms = mutableListOf<Alarm>()
             var successCount = 0
             var firstError: Exception? = null
 
-            for ((id, deferred) in s.selectedTenantIds.zip(deferreds)) {
+            for ((id, deferred) in ids.zip(deferreds)) {
                 try {
-                    val tenant = deferred.await()
-                    names[id] = tenant.nombre
-                    alarms.addAll(tenant.alarms)
+                    alarms.addAll(deferred.await().alarms)
                     successCount++
                 } catch (e: Exception) {
                     if (firstError == null) firstError = e
                 }
             }
 
-            // Si ninguno respondió, se muestra el primer error; si alguno respondió, se toleran los fallos.
             if (successCount == 0 && firstError != null) throw firstError!!
+            alarms
+        }
 
-            names to alarms
+    /** Alarmas efectivamente suscritas: todas las del tenant (modo todas) o las manuales. */
+    private fun effectiveSubscribed(s: UiState): List<Alarm> =
+        s.followedAlarms.filter { alarm ->
+            alarm.tenantId in s.subscribedTenantIds ||
+                alarm.id in (s.manualSubscriptions[alarm.tenantId] ?: emptySet())
         }
 
     /** Programa las alarmas locales en función de las suscripciones activas. */
     private fun rescheduleAlarms() {
         val s = _uiState.value
-        val subscribed = s.alarms.filter { it.id in s.subscribedAlarmIds }
-        scheduler.schedule(subscribed)
+        scheduler.schedule(effectiveSubscribed(s), s.baseUrl, s.apiKey)
     }
 
-    /** Desconecta: detiene el sondeo, cancela alarmas y limpia el estado. */
+    /** Descarga (una sola vez) el audio de las alarmas suscritas para tenerlo local a la hora. */
+    private fun preCacheAudio(alarms: List<Alarm>) {
+        val s = _uiState.value
+        val withAudio = alarms.filter { !it.urlAudio.isNullOrBlank() }
+        if (withAudio.isEmpty()) return
+
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                for (alarm in withAudio) {
+                    alarm.urlAudio?.let { audioCache.getOrDownload(s.baseUrl, s.apiKey, it) }
+                }
+            }
+        }
+    }
+
+    // --- Desconexión ---
+
     fun disconnect() {
         pollJob?.cancel()
         scheduler.cancelAll()
+        settings.configured = false
+        settings.subscribedTenantIds = emptySet()
+        settings.manualSubscriptions = emptyMap()
         _uiState.value = _uiState.value.copy(
             connected = false,
+            showSettings = false,
+            selectedTenantId = null,
+            tenantAlarms = emptyList(),
             tenants = emptyList(),
-            selectedTenantIds = emptySet(),
-            tenantNames = emptyMap(),
-            alarms = emptyList(),
-            subscribedAlarmIds = emptySet(),
+            subscribedTenantIds = emptySet(),
+            manualSubscriptions = emptyMap(),
+            followedAlarms = emptyList(),
             error = null,
+            successMessage = null,
             lastUpdated = null,
         )
-        settings.selectedTenantIds = emptySet()
-        settings.subscribedAlarmIds = emptySet()
+    }
+
+    fun clearMessage() {
+        _uiState.value = _uiState.value.copy(successMessage = null)
     }
 
     companion object {
