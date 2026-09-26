@@ -11,6 +11,7 @@ import com.holaolvidon.androidclient.data.TenantSummary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -152,32 +153,33 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Obtiene, en paralelo, las alarmas de cada tenant seleccionado (tolerando fallos parciales). */
-    private suspend fun fetchAlarmsForSelected(s: UiState): Pair<Map<String, String>, List<Alarm>> {
-        val deferreds = s.selectedTenantIds.map { id ->
-            async(Dispatchers.IO) { apiClient.fetchTenant(s.baseUrl, s.apiKey, id) }
-        }
-
-        val names = mutableMapOf<String, String>()
-        val alarms = mutableListOf<Alarm>()
-        var successCount = 0
-        var firstError: Exception? = null
-
-        for ((id, deferred) in s.selectedTenantIds.zip(deferreds)) {
-            try {
-                val tenant = deferred.await()
-                names[id] = tenant.nombre
-                alarms.addAll(tenant.alarms)
-                successCount++
-            } catch (e: Exception) {
-                if (firstError == null) firstError = e
+    private suspend fun fetchAlarmsForSelected(s: UiState): Pair<Map<String, String>, List<Alarm>> =
+        coroutineScope {
+            val deferreds = s.selectedTenantIds.map { id ->
+                async(Dispatchers.IO) { apiClient.fetchTenant(s.baseUrl, s.apiKey, id) }
             }
+
+            val names = mutableMapOf<String, String>()
+            val alarms = mutableListOf<Alarm>()
+            var successCount = 0
+            var firstError: Exception? = null
+
+            for ((id, deferred) in s.selectedTenantIds.zip(deferreds)) {
+                try {
+                    val tenant = deferred.await()
+                    names[id] = tenant.nombre
+                    alarms.addAll(tenant.alarms)
+                    successCount++
+                } catch (e: Exception) {
+                    if (firstError == null) firstError = e
+                }
+            }
+
+            // Si ninguno respondió, se muestra el primer error; si alguno respondió, se toleran los fallos.
+            if (successCount == 0 && firstError != null) throw firstError!!
+
+            names to alarms
         }
-
-        // Si ninguno respondió, se muestra el primer error; si alguno respondió, se toleran los fallos.
-        if (successCount == 0 && firstError != null) throw firstError!!
-
-        return names to alarms
-    }
 
     /** Programa las alarmas locales en función de las suscripciones activas. */
     private fun rescheduleAlarms() {
