@@ -78,6 +78,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Detiene la alarma que está sonando (envía la acción de parada al servicio). */
     fun stopRinging() {
+        val app = getApplication<Application>()
         val intent = Intent(app, AlarmRingService::class.java)
             .setAction(AlarmRingService.ACTION_STOP)
         app.startService(intent)
