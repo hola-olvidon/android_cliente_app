@@ -44,6 +44,13 @@ fun TenantsScreen(state: UiState, viewModel: AppViewModel, padding: PaddingValue
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                state.serverTimeZone?.let { zone ->
+                    Text(
+                        "Zona horaria del servidor: $zone — las alarmas suenan según esta zona.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             TextButton(onClick = viewModel::refresh) { Text("Actualizar") }
             TextButton(onClick = viewModel::openSettings) { Text("Ajustes") }

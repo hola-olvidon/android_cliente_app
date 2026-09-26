@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.ZoneId
 
 data class UiState(
     val baseUrl: String = "",
@@ -35,6 +36,7 @@ data class UiState(
     val loading: Boolean = false,
     val error: String? = null,
     val lastUpdated: Long? = null,
+    val serverTimeZone: String? = null,
 )
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -84,8 +86,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val tenants = withContext(Dispatchers.IO) {
                     apiClient.fetchTenants(s.baseUrl, s.apiKey)
                 }
+                val zona = loadServerTimeZone(s)
                 _uiState.value = _uiState.value.copy(
                     tenants = tenants,
+                    serverTimeZone = zona,
                     connected = true,
                     loading = false,
                     successMessage = "Conexión exitosa",
@@ -110,7 +114,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val tenants = withContext(Dispatchers.IO) {
                     apiClient.fetchTenants(s.baseUrl, s.apiKey)
                 }
-                _uiState.value = _uiState.value.copy(tenants = tenants)
+                val zona = loadServerTimeZone(s)
+                _uiState.value = _uiState.value.copy(
+                    tenants = tenants,
+                    serverTimeZone = zona,
+                )
                 startPolling()
                 refreshFollowedAlarms()
             } catch (e: Exception) {
@@ -129,7 +137,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val tenants = withContext(Dispatchers.IO) {
                     apiClient.fetchTenants(s.baseUrl, s.apiKey)
                 }
-                _uiState.value = _uiState.value.copy(tenants = tenants, loading = false)
+                val zona = loadServerTimeZone(s)
+                _uiState.value = _uiState.value.copy(
+                    tenants = tenants,
+                    serverTimeZone = zona,
+                    loading = false,
+                )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     loading = false,
@@ -293,10 +306,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 alarm.id in (s.manualSubscriptions[alarm.tenantId] ?: emptySet())
         }
 
+    /**
+     * Obtiene la zona horaria del servidor. No es fatal si el endpoint no existe o falla:
+     * en ese caso se devuelve `null` y se usará "UTC" al programar.
+     */
+    private suspend fun loadServerTimeZone(s: UiState): String? =
+        withContext(Dispatchers.IO) {
+            runCatching { apiClient.fetchConfig(s.baseUrl, s.apiKey).zonaHoraria }.getOrNull()
+        }
+
+    /** Resuelve la zona horaria del servidor a un [ZoneId] válido (fallback "UTC"). */
+    private fun resolveZone(s: UiState): ZoneId =
+        s.serverTimeZone?.let { z -> runCatching { ZoneId.of(z) }.getOrNull() }
+            ?: ZoneId.of("UTC")
+
     /** Programa las alarmas locales en función de las suscripciones activas. */
     private fun rescheduleAlarms() {
         val s = _uiState.value
-        scheduler.schedule(effectiveSubscribed(s), s.baseUrl, s.apiKey)
+        scheduler.schedule(effectiveSubscribed(s), s.baseUrl, s.apiKey, resolveZone(s))
     }
 
     /** Descarga (una sola vez) el audio de las alarmas suscritas para tenerlo local a la hora. */
@@ -334,6 +361,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             error = null,
             successMessage = null,
             lastUpdated = null,
+            serverTimeZone = null,
         )
     }
 

@@ -60,6 +60,20 @@ class ApiClient {
         }
     }
 
+    /** Obtiene la configuración pública del servidor (`GET /mobile/config`). */
+    fun fetchConfig(baseUrl: String, apiKey: String): ServerConfig {
+        val body = get("${baseUrl.trimEnd('/')}/mobile/config", apiKey)
+        return try {
+            val o = JSONObject(body)
+            ServerConfig(zonaHoraria = o.optString("zonaHoraria", "UTC"))
+        } catch (e: Exception) {
+            throw NetworkException(
+                "Respuesta del servidor no válida (no es JSON o no tiene el formato esperado): " +
+                    (e.message ?: "error de parseo"),
+            )
+        }
+    }
+
     private fun get(url: String, apiKey: String): String {
         val request = Request.Builder()
             .url(url)
@@ -124,6 +138,7 @@ class ApiClient {
                     tenantId = a.optString("tenantId", id),
                     titulo = a.optString("titulo", "Alarma"),
                     horaProgramada = parseDate(a.optString("horaProgramada")),
+                    recurrencia = parseRecurrence(a.optJSONObject("recurrencia")),
                     urlAudio = a.optString("urlAudio").takeIf { it.isNotBlank() },
                     activa = a.optBoolean("activa", true),
                 ),

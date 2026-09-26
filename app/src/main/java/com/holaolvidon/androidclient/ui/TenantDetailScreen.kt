@@ -119,7 +119,8 @@ private fun AlarmRow(
             Column(Modifier.weight(1f)) {
                 Text(alarm.titulo, style = MaterialTheme.typography.titleMedium)
                 Text(
-                    formatTime(alarm.horaProgramada),
+                    alarm.recurrencia?.let { formatRecurrence(it) }
+                        ?: formatTime(alarm.horaProgramada),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
