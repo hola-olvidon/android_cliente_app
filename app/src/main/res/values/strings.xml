@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">Alarmas Cliente</string>
+
+    <string name="settings_title">Configuración</string>
+    <string name="settings_url">URL del servidor</string>
+    <string name="settings_api_key">Clave de API (X-API-KEY)</string>
+    <string name="settings_tenant_id">ID del tenant</string>
+    <string name="settings_interval">Intervalo de sondeo (segundos)</string>
+    <string name="settings_connect">Conectar</string>
+
+    <string name="alarms_refresh">Actualizar</string>
+    <string name="alarms_disconnect">Ajustes</string>
+    <string name="alarms_active">Activa</string>
+    <string name="alarms_inactive">Inactiva</string>
+    <string name="alarms_empty">Sin alarmas para este tenant</string>
+</resources>

@@ -1,0 +1,26 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Fondo circular -->
+    <path
+        android:fillColor="#4F46E5"
+        android:pathData="M54,0 a54,54 0 1,1 0,108 a54,54 0 1,1 0,-108 z" />
+
+    <!-- Esfera del reloj -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="6"
+        android:pathData="M54,34 a20,20 0 1,1 0,40 a20,20 0 1,1 0,-40 z" />
+
+    <!-- Manecillas -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:pathData="M54,40 L54,54 L63,60" />
+</vector>
