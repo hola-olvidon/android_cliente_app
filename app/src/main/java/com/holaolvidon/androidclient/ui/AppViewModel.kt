@@ -44,10 +44,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private var pollJob: Job? = null
 
-    fun updateBaseUrl(value: String) = _uiState.value = _uiState.value.copy(baseUrl = value)
-    fun updateApiKey(value: String) = _uiState.value = _uiState.value.copy(apiKey = value)
-    fun updateTenantId(value: String) = _uiState.value = _uiState.value.copy(tenantId = value)
-    fun updateInterval(value: Long) = _uiState.value = _uiState.value.copy(pollIntervalSeconds = value)
+    fun updateBaseUrl(value: String) {
+        _uiState.value = _uiState.value.copy(baseUrl = value)
+    }
+
+    fun updateApiKey(value: String) {
+        _uiState.value = _uiState.value.copy(apiKey = value)
+    }
+
+    fun updateTenantId(value: String) {
+        _uiState.value = _uiState.value.copy(tenantId = value)
+    }
+
+    fun updateInterval(value: Long) {
+        _uiState.value = _uiState.value.copy(pollIntervalSeconds = value)
+    }
 
     /** Guarda la configuración, arranca el sondeo y hace una primera consulta. */
     fun connect() {

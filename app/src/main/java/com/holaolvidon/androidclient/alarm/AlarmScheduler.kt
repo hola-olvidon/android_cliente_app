@@ -11,7 +11,7 @@ import com.holaolvidon.androidclient.data.Alarm
  * Programa/cancela alarmas exactas con [AlarmManager]. Guarda en SharedPreferences los IDs
  * programados para poder cancelar los que dejen de ser necesarios en cada refresco.
  */
-class AlarmScheduler(context: Context) {
+class AlarmScheduler(private val context: Context) {
     private val alarmManager =
         context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
     private val prefs =
