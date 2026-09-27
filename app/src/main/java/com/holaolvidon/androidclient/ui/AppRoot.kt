@@ -1,5 +1,6 @@
 package com.holaolvidon.androidclient.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Scaffold
@@ -20,6 +21,13 @@ fun AppRoot(state: UiState, viewModel: AppViewModel) {
             snackbarHostState.showSnackbar(message)
             viewModel.clearMessage()
         }
+    }
+
+    // El botón "atrás" del celular replica el botón "Volver": sale del detalle de tenant o de
+    // ajustes en lugar de minimizar la app.
+    BackHandler(enabled = state.showSettings || state.selectedTenantId != null) {
+        if (state.showSettings) viewModel.closeSettings()
+        else if (state.selectedTenantId != null) viewModel.closeTenant()
     }
 
     Box(Modifier.fillMaxSize()) {
