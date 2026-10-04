@@ -251,10 +251,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val s = _uiState.value
         val current = s.manualSubscriptions[tenantId] ?: emptySet()
         val next = if (enabled) current + alarmId else current - alarmId
-        val manual = s.manualSubscriptions + (tenantId to next)
 
+        // Si marcamos manualmente todas las alarmas del tenant, pasamos automáticamente
+        // a "suscribirme a todas" (el toggle "seleccionar todo" se activa solo).
+        val tenantAlarms = s.tenantAlarms.filter { it.tenantId == tenantId }
+        val allSelected = enabled && tenantAlarms.isNotEmpty() && tenantAlarms.all { it.id in next }
+
+        val subscribed = if (allSelected) s.subscribedTenantIds + tenantId else s.subscribedTenantIds
+        val manual = if (allSelected) s.manualSubscriptions - tenantId
+        else s.manualSubscriptions + (tenantId to next)
+
+        settings.subscribedTenantIds = subscribed
         settings.manualSubscriptions = manual
-        _uiState.value = _uiState.value.copy(manualSubscriptions = manual)
+        _uiState.value = _uiState.value.copy(
+            subscribedTenantIds = subscribed,
+            manualSubscriptions = manual,
+        )
         refreshFollowedAlarms()
     }
 
