@@ -55,15 +55,16 @@ class AlarmRingService : Service() {
         try {
             mp.setAudioAttributes(alarmAudioAttributes())
             mp.setDataSource(path)
-            mp.isLooping = true
-            mp.prepare()
-            mp.start()
+            mp.setOnCompletionListener { loop(mp) }
             mp.setOnErrorListener { _, _, _ ->
+                dispose(mp)
                 playDefault()
                 true
             }
+            mp.prepare()
+            mp.start()
         } catch (e: Exception) {
-            runCatching { mp.release() }
+            dispose(mp)
             playDefault()
         }
     }
@@ -75,17 +76,40 @@ class AlarmRingService : Service() {
         try {
             mp.setAudioAttributes(alarmAudioAttributes())
             mp.setDataSource(this, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM))
-            mp.isLooping = true
-            mp.prepare()
-            mp.start()
+            mp.setOnCompletionListener { loop(mp) }
             mp.setOnErrorListener { _, _, _ ->
+                dispose(mp)
                 stopSelf()
                 true
             }
+            mp.prepare()
+            mp.start()
         } catch (e: Exception) {
-            runCatching { mp.release() }
+            dispose(mp)
             stopSelf()
         }
+    }
+
+    /**
+     * Repite el audio solo al terminar su reproducción completa. No usamos [MediaPlayer.isLooping]
+     * porque, con archivos largos o con metadatos de duración inexactos (MP3 VBR, OGG...), puede
+     * reiniciar la canción antes del final real.
+     */
+    private fun loop(mp: MediaPlayer) {
+        if (stopped) return
+        runCatching {
+            mp.seekTo(0)
+            mp.start()
+        }.onFailure {
+            dispose(mp)
+            playDefault()
+        }
+    }
+
+    /** Libera un reproductor y, si era el activo, deja de señalarlo como tal. */
+    private fun dispose(mp: MediaPlayer) {
+        runCatching { mp.release() }
+        if (player === mp) player = null
     }
 
     private fun alarmAudioAttributes(): AudioAttributes =

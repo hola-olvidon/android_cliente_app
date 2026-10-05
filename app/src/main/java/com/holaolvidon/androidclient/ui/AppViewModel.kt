@@ -360,13 +360,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Descarga (una sola vez) el audio de las alarmas suscritas para tenerlo local a la hora. */
     private fun preCacheAudio(alarms: List<Alarm>) {
         val s = _uiState.value
-        val withAudio = alarms.filter { !it.urlAudio.isNullOrBlank() }
-        if (withAudio.isEmpty()) return
+        val urls = alarms.mapNotNull { it.urlAudio }.filter { it.isNotBlank() }.distinct()
+        if (urls.isEmpty()) return
 
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                for (alarm in withAudio) {
-                    alarm.urlAudio?.let { audioCache.getOrDownload(s.baseUrl, s.apiKey, it) }
+                // En paralelo (acotado) para que todos los audios estén en local antes de la alarma,
+                // incluso si son varios o "pesados".
+                urls.chunked(PARALLEL_DOWNLOADS).forEach { batch ->
+                    batch.map { url -> async { audioCache.getOrDownload(s.baseUrl, s.apiKey, url) } }
+                        .forEach { it.await() }
                 }
             }
         }
@@ -402,5 +405,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     companion object {
         private const val POLL_INTERVAL_MS = 30_000L
+        private const val PARALLEL_DOWNLOADS = 4
     }
 }
