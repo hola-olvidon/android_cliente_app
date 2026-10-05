@@ -3,6 +3,7 @@ name: Build APK
 on:
   push:
     branches: [main, master]
+    tags: ["v*"]
   workflow_dispatch: # permite lanzar el build manualmente desde la pestaña Actions
 
 permissions:
@@ -38,8 +39,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
-          gh release create latest android_cliente_app.apk \
-            --title "Android Cliente App (latest)" \
-            --notes "APK de debug compilada automáticamente desde la rama ${GITHUB_REF_NAME}." \
-            --prerelease
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            # Release estable para el tag de versión (p. ej. v1.0.0), con el APK adjunto.
+            gh release create "$GITHUB_REF_NAME" android_cliente_app.apk \
+              --title "Android Cliente App $GITHUB_REF_NAME" \
+              --notes "APK de debug compilada automáticamente desde el tag ${GITHUB_REF_NAME}."
+          else
+            # Release "latest" en movimiento para la rama.
+            gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+            gh release create latest android_cliente_app.apk \
+              --title "Android Cliente App (latest)" \
+              --notes "APK de debug compilada automáticamente desde la rama ${GITHUB_REF_NAME}." \
+              --prerelease
+          fi
